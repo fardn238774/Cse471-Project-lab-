@@ -1,0 +1,1839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAIDO GARAGE — Multi-Car Configurator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --line:#2a2e35; --line-soft:#1a1d22;
+    --panel:rgba(14,15,18,0.82); --panel-solid:#0e0f12;
+    --cyan:#00e5ff; --text:#eef1f5; --text-dim:#8992a0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{ height:100%; overflow:hidden; }
+  body{
+    background:#000; color:var(--text);
+    font-family:'Rajdhani',sans-serif;
+  }
+
+  .stage{
+    position:relative; width:100vw; height:100vh; overflow:hidden;
+    background:#000; cursor:grab;
+  }
+  .stage:active{ cursor:grabbing; }
+  #canvasHost{ position:absolute; inset:0; z-index:1; }
+
+  .vignette{
+    position:absolute; inset:0; z-index:2; pointer-events:none;
+    background:radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.75) 100%);
+  }
+
+  #loading{
+    position:absolute; inset:0; z-index:20; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:.6rem; background:#000;
+    font-family:'Archivo Black',sans-serif; font-size:.85rem; letter-spacing:.1em; color:var(--cyan);
+  }
+  .loadbar{ width:220px; height:3px; background:var(--line); overflow:hidden; }
+  .loadbar span{ display:block; height:100%; width:40%; background:var(--cyan); animation:load 1.1s ease-in-out infinite; }
+  @keyframes load{ 0%{transform:translateX(-100%);} 100%{transform:translateX(350%);} }
+
+  .flash{
+    position:absolute; inset:0; z-index:15; pointer-events:none;
+    background:radial-gradient(circle, rgba(255,255,255,0.55), transparent 60%);
+    opacity:0;
+  }
+  .flash.go{ animation:flashpop .45s ease-out; }
+  @keyframes flashpop{ 0%{opacity:.9;} 100%{opacity:0;} }
+
+  .topbar{
+    position:absolute; top:0; left:0; right:0; z-index:10;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:1.1rem 1.6rem;
+    background:linear-gradient(180deg, rgba(0,0,0,0.75), transparent);
+  }
+  .logo{ font-family:'Archivo Black',sans-serif; font-size:1.15rem; letter-spacing:.03em; }
+  .logo span{ color:var(--cyan); }
+  .hud-chip{
+    font-size:.72rem; letter-spacing:.1em; color:var(--text-dim); text-transform:uppercase;
+    border:1px solid var(--line); padding:.35rem .8rem; border-radius:2px;
+    background:rgba(10,11,14,0.5);
+  }
+  .rating-wrap{ display:flex; align-items:center; gap:.6rem; }
+  .rating-bars{ display:flex; gap:3px; }
+  .rating-bars i{ width:6px; height:14px; background:var(--line); border-radius:1px; display:block; }
+  .rating-bars i.on{ background:var(--cyan); box-shadow:0 0 6px rgba(0,229,255,0.6); }
+
+  .sidebar{
+    position:absolute; top:80px; left:0; bottom:110px; z-index:10;
+    width:290px; padding:1.2rem 1.3rem; overflow-y:auto;
+    background:var(--panel); backdrop-filter:blur(10px);
+    border-right:1px solid var(--line);
+  }
+  .sidebar::-webkit-scrollbar{ width:5px; }
+  .sidebar::-webkit-scrollbar-thumb{ background:var(--line); }
+
+  .sb-section{ margin-bottom:1.5rem; }
+  .sb-section h3{
+    font-family:'Archivo Black',sans-serif; font-size:.72rem; letter-spacing:.12em;
+    color:var(--text-dim); text-transform:uppercase; margin-bottom:.8rem;
+  }
+  .swatch-row{ display:flex; gap:.55rem; flex-wrap:wrap; }
+  .swatch{
+    width:32px; height:32px; border-radius:50%; cursor:pointer; position:relative;
+    border:2px solid transparent; transition:transform .15s, border-color .15s;
+  }
+  .swatch:hover{ transform:scale(1.08); }
+  .swatch.active{ border-color:var(--cyan); box-shadow:0 0 12px rgba(0,229,255,0.5); }
+  .swatch-price{
+    position:absolute; bottom:-18px; left:50%; transform:translateX(-50%);
+    font-size:.58rem; color:var(--text-dim); white-space:nowrap;
+  }
+
+  .custom-color-row{ display:flex; align-items:center; gap:.7rem; margin-top:1.4rem; }
+  input[type="color"]{
+    -webkit-appearance:none; width:32px; height:32px; border:2px solid var(--line); border-radius:50%;
+    background:none; cursor:pointer; padding:0; overflow:hidden;
+  }
+  input[type="color"]::-webkit-color-swatch-wrapper{ padding:0; }
+  input[type="color"]::-webkit-color-swatch{ border:none; border-radius:50%; }
+  .custom-label{ font-size:.74rem; color:var(--text-dim); letter-spacing:.03em; }
+
+  .slider-block{ margin-top:1rem; }
+  .slider-block label{ display:flex; justify-content:space-between; font-size:.72rem; color:var(--text-dim); letter-spacing:.05em; text-transform:uppercase; margin-bottom:.5rem; }
+  .slider-block label span{ color:var(--cyan); font-weight:700; }
+  input[type="range"]{
+    -webkit-appearance:none; width:100%; height:3px; background:var(--line); border-radius:2px; outline:none;
+  }
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:var(--cyan);
+    cursor:pointer; box-shadow:0 0 8px rgba(0,229,255,0.6);
+  }
+
+  .finish-row{ display:flex; gap:.5rem; flex-wrap:wrap; }
+  .finish-btn{
+    background:rgba(255,255,255,0.03); border:1px solid var(--line); color:var(--text-dim);
+    font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+    font-size:.7rem; padding:.5rem .7rem; cursor:pointer; border-radius:3px; transition:all .15s;
+    display:flex; flex-direction:column; align-items:flex-start; gap:.25rem;
+  }
+  .finish-btn:hover, .finish-btn.active{ border-color:var(--cyan); color:var(--text); }
+  .finish-btn-top{ display:flex; align-items:center; gap:.4rem; }
+  .finish-swatch{ width:12px; height:12px; border-radius:50%; display:inline-block; }
+  .finish-price{ font-size:.63rem; color:var(--text-dim); }
+
+  .part-row{ display:flex; gap:.55rem; flex-wrap:wrap; }
+  .part-chip{
+    flex:1 1 auto; min-width:112px; background:rgba(255,255,255,0.03); border:1px solid var(--line);
+    border-radius:4px; padding:.6rem .7rem; cursor:pointer; transition:all .15s;
+  }
+  .part-chip:hover{ border-color:var(--line); }
+  .part-chip.active{ border-color:var(--cyan); box-shadow:0 0 10px rgba(0,229,255,0.25); }
+  .part-chip-name{ font-size:.72rem; font-weight:700; color:var(--text); letter-spacing:.02em; }
+  .part-chip-tag{ font-size:.62rem; color:var(--text-dim); margin-top:.2rem; }
+  .part-chip.disabled{ cursor:not-allowed; opacity:.45; }
+
+  .price-box{
+    background:rgba(255,255,255,0.03); border:1px solid var(--line); border-radius:5px;
+    padding:.9rem 1rem;
+  }
+  .price-row{ display:flex; justify-content:space-between; font-size:.76rem; color:var(--text-dim); margin-bottom:.5rem; }
+  .price-row span:last-child{ color:var(--text); font-weight:600; }
+  .price-total{
+    display:flex; justify-content:space-between; padding-top:.6rem; margin-top:.3rem;
+    border-top:1px solid var(--line); font-size:.88rem; font-weight:700;
+  }
+  .price-total span:last-child{ color:var(--cyan); }
+  .confirm-btn{
+    width:100%; margin-top:1rem; padding:.8rem; border:none; border-radius:4px;
+    background:var(--cyan); color:#031014; font-family:'Archivo Black',sans-serif;
+    font-size:.78rem; letter-spacing:.06em; text-transform:uppercase; cursor:pointer;
+    transition:background .15s;
+  }
+  .confirm-btn:hover{ background:#33ecff; }
+
+  .camera-hud{
+    position:absolute; top:80px; right:1.4rem; z-index:10;
+    display:flex; flex-direction:column; gap:.5rem; align-items:flex-end;
+  }
+  .angle-row{ display:flex; gap:.4rem; }
+  .angle-btn{
+    background:var(--panel); border:1px solid var(--line); color:var(--text-dim);
+    font-weight:600; letter-spacing:.06em; text-transform:uppercase;
+    font-size:.7rem; padding:.5rem .8rem; cursor:pointer; border-radius:3px; transition:all .15s;
+    backdrop-filter:blur(8px);
+  }
+  .angle-btn:hover, .angle-btn.active{ border-color:var(--cyan); color:var(--text); }
+  .spin-toggle{
+    display:flex; align-items:center; gap:.5rem; font-size:.72rem; color:var(--text-dim);
+    cursor:pointer; user-select:none; background:var(--panel); border:1px solid var(--line);
+    padding:.4rem .7rem; border-radius:3px; backdrop-filter:blur(8px);
+  }
+  .spin-dot{ width:8px; height:8px; border-radius:50%; background:var(--line); transition:background .2s; }
+  .spin-dot.on{ background:var(--cyan); box-shadow:0 0 8px var(--cyan); }
+
+  .carousel-wrap{
+    position:absolute; bottom:0; left:0; right:0; z-index:10;
+    padding:1rem 1.4rem 1.2rem;
+    background:linear-gradient(0deg, rgba(0,0,0,0.85), transparent);
+  }
+  .carousel-label-row{
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:.6rem;
+  }
+  .carousel-label{
+    font-size:.7rem; letter-spacing:.12em; color:var(--text-dim); text-transform:uppercase;
+  }
+  .carousel-arrows{ display:flex; gap:.5rem; }
+  .carousel-arrow{
+    width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:var(--panel); border:1px solid var(--line); color:var(--text-dim);
+    font-size:.8rem; cursor:pointer; transition:all .15s; backdrop-filter:blur(8px);
+  }
+  .carousel-arrow:hover:not(:disabled){ border-color:var(--cyan); color:var(--text); }
+  .carousel-arrow:disabled{ opacity:.3; cursor:default; }
+  .carousel-viewport{ overflow:hidden; }
+  .carousel{
+    display:flex; gap:.8rem; transition:transform .35s cubic-bezier(.4,0,.2,1); will-change:transform;
+  }
+  .build-card{
+    flex:0 0 auto; width:150px; background:var(--panel); border:1px solid var(--line);
+    border-radius:5px; padding:.7rem; cursor:pointer; transition:border-color .15s, transform .15s;
+    backdrop-filter:blur(8px);
+  }
+  .build-card:hover{ transform:translateY(-2px); border-color:var(--line); }
+  .build-card.active{ border-color:var(--cyan); box-shadow:0 0 14px rgba(0,229,255,0.25); }
+  .build-swatch{ width:100%; height:34px; border-radius:3px; margin-bottom:.55rem; }
+  .car-swatch{
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Archivo Black',sans-serif; font-size:.85rem; color:#fff; letter-spacing:.02em;
+  }
+  .build-name{ font-size:.78rem; font-weight:700; color:var(--text); letter-spacing:.02em; }
+  .build-tag{ font-size:.68rem; color:var(--text-dim); margin-top:.15rem; }
+  .view-btn{
+    margin-top:.6rem; width:100%; padding:.4rem 0; cursor:pointer;
+    background:rgba(0,229,255,0.08); border:1px solid var(--cyan); color:var(--cyan);
+    font-family:'Rajdhani',sans-serif; font-size:.66rem; font-weight:700; letter-spacing:.06em;
+    text-transform:uppercase; border-radius:3px; transition:all .15s;
+  }
+  .view-btn:hover{ background:var(--cyan); color:#031014; }
+
+  .exit-view-btn{
+    display:none; position:absolute; top:80px; left:1.4rem; z-index:11;
+    background:var(--panel); border:1px solid var(--cyan); color:var(--cyan);
+    padding:.6rem 1rem; border-radius:4px; font-size:.72rem; letter-spacing:.05em;
+    text-transform:uppercase; cursor:pointer; backdrop-filter:blur(8px);
+  }
+  body.view-mode .exit-view-btn{ display:block; }
+  body.view-mode .sidebar{ display:none; }
+  body.view-mode .credit{ left:1.4rem; }
+
+  .credit{
+    position:absolute; bottom:1.1rem; left:305px; z-index:10;
+    font-size:.64rem; color:rgba(137,146,160,0.75); line-height:1.5; max-width:460px;
+  }
+  .credit a{ color:var(--cyan); }
+
+  /* Payment modal */
+  .modal-overlay{
+    position:fixed; inset:0; z-index:100; background:rgba(0,0,0,0.82);
+    display:none; align-items:center; justify-content:center; padding:1.5rem;
+  }
+  .modal-overlay.active{ display:flex; }
+  .modal{
+    background:#0e0f12; border:1px solid var(--line); border-radius:6px;
+    width:100%; max-width:440px; padding:1.8rem; position:relative;
+  }
+  .modal-close{
+    position:absolute; top:1rem; right:1rem; background:none; border:none;
+    color:var(--text-dim); font-size:1.3rem; cursor:pointer; line-height:1;
+  }
+  .modal-close:hover{ color:var(--text); }
+  .modal-eyebrow{
+    font-family:'Archivo Black',sans-serif; font-size:.68rem; color:var(--cyan);
+    text-transform:uppercase; letter-spacing:.1em; margin-bottom:.6rem;
+  }
+  .modal h3{ font-family:'Archivo Black',sans-serif; font-size:1.2rem; margin-bottom:1.3rem; text-transform:uppercase; }
+  .modal-step{ display:none; }
+  .modal-step.active{ display:block; }
+  .modal-summary-row{ display:flex; justify-content:space-between; font-size:.82rem; color:var(--text-dim); padding:.55rem 0; border-bottom:1px solid var(--line-soft); }
+  .modal-summary-row span:last-child{ color:var(--text); font-weight:600; }
+  .modal-summary-total{ display:flex; justify-content:space-between; padding:.8rem 0 0; margin-top:.4rem; font-size:1rem; font-weight:700; }
+  .modal-summary-total span:last-child{ color:var(--cyan); }
+  .form-field{ margin-top:1rem; }
+  .form-field label{ display:block; font-size:.7rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:.06em; margin-bottom:.5rem; }
+  .form-field input{
+    width:100%; background:#000; border:1px solid var(--line); color:var(--text);
+    padding:.75rem; border-radius:4px; font-family:'Rajdhani',sans-serif; font-size:.9rem;
+  }
+  .pay-method-row{ display:flex; gap:.6rem; margin-top:.5rem; }
+  .pay-method{
+    flex:1; border:1px solid var(--line); border-radius:4px; padding:.7rem; text-align:center;
+    font-size:.75rem; color:var(--text-dim); cursor:pointer; transition:all .15s;
+  }
+  .pay-method:hover, .pay-method.selected{ border-color:var(--cyan); color:var(--text); }
+  .modal-actions{ display:flex; justify-content:space-between; gap:1rem; margin-top:1.6rem; }
+  .btn-ghost{
+    background:none; border:1px solid var(--line); color:var(--text-dim);
+    padding:.75rem 1.2rem; border-radius:4px; cursor:pointer; font-size:.8rem; text-transform:uppercase; letter-spacing:.04em;
+  }
+  .btn-primary{
+    background:var(--cyan); color:#031014; border:none; font-family:'Archivo Black',sans-serif;
+    padding:.75rem 1.4rem; border-radius:4px; cursor:pointer; font-size:.78rem; text-transform:uppercase; letter-spacing:.04em;
+  }
+  .modal-confirm{ text-align:center; padding:.5rem 0; }
+  .modal-confirm .icon{ font-size:2.4rem; color:var(--cyan); margin-bottom:1rem; font-family:'Archivo Black',sans-serif; }
+  .modal-confirm p{ color:var(--text-dim); font-size:.85rem; line-height:1.5; margin-bottom:1.5rem; }
+
+  @media (max-width:900px){
+    .sidebar{ width:240px; }
+    .credit{ display:none; }
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stageWrap">
+  <div id="canvasHost"></div>
+  <div class="vignette"></div>
+  <div class="flash" id="flash"></div>
+
+  <div class="topbar">
+    <div class="logo">KAIDO<span>//</span>GARAGE</div>
+    <div class="rating-wrap">
+      <span class="hud-chip">BUILD RATING</span>
+      <div class="rating-bars" id="ratingBars">
+        <i></i><i></i><i></i><i></i><i></i>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="sb-section">
+      <h3>Paint</h3>
+      <div class="swatch-row" id="swatchRow">
+        <div class="swatch active" style="background:#c81c2e" data-hex="#c81c2e" data-price="0" onclick="pickPaint(this,'#c81c2e',0)"></div>
+        <div class="swatch" style="background:#0d0d0f" data-hex="#0d0d0f" data-price="0" onclick="pickPaint(this,'#0d0d0f',0)"></div>
+        <div class="swatch" style="background:#e8e8e0" data-hex="#e8e8e0" data-price="0" onclick="pickPaint(this,'#e8e8e0',0)"></div>
+        <div class="swatch" style="background:#0a3d91" data-hex="#0a3d91" data-price="15000" onclick="pickPaint(this,'#0a3d91',15000)"></div>
+        <div class="swatch" style="background:#ffd400" data-hex="#ffd400" data-price="20000" onclick="pickPaint(this,'#ffd400',20000)"></div>
+        <div class="swatch" style="background:#0f5c2e" data-hex="#0f5c2e" data-price="20000" onclick="pickPaint(this,'#0f5c2e',20000)"></div>
+        <div class="swatch" style="background:#7a1fa2" data-hex="#7a1fa2" data-price="35000" onclick="pickPaint(this,'#7a1fa2',35000)"></div>
+        <div class="swatch" style="background:#ff6a00" data-hex="#ff6a00" data-price="25000" onclick="pickPaint(this,'#ff6a00',25000)"></div>
+      </div>
+      <div class="custom-color-row">
+        <input type="color" id="customColor" value="#c81c2e" oninput="onCustomColor(this.value)">
+        <span class="custom-label">Custom hex (+ ৳40,000 bespoke mix)</span>
+      </div>
+      <div class="slider-block">
+        <label>Brightness <span id="brightVal">100%</span></label>
+        <input type="range" min="60" max="140" value="100" oninput="onBrightness(this.value)">
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <h3>Finish</h3>
+      <div class="finish-row" id="finishRow">
+        <button class="finish-btn active" data-finish="gloss" data-price="0" onclick="setFinish('gloss', this, 0)">
+          <span class="finish-btn-top"><span class="finish-swatch" style="background:linear-gradient(135deg,#fff,#888)"></span>Gloss</span>
+          <span class="finish-price">Included</span>
+        </button>
+        <button class="finish-btn" data-finish="matte" data-price="85000" onclick="setFinish('matte', this, 85000)">
+          <span class="finish-btn-top"><span class="finish-swatch" style="background:#5a5a5a"></span>Matte</span>
+          <span class="finish-price">+ ৳85,000</span>
+        </button>
+        <button class="finish-btn" data-finish="metallic" data-price="55000" onclick="setFinish('metallic', this, 55000)">
+          <span class="finish-btn-top"><span class="finish-swatch" style="background:linear-gradient(135deg,#d8d8d8,#8a8a8a)"></span>Metallic</span>
+          <span class="finish-price">+ ৳55,000</span>
+        </button>
+        <button class="finish-btn" data-finish="chrome" data-price="180000" onclick="setFinish('chrome', this, 180000)">
+          <span class="finish-btn-top"><span class="finish-swatch" style="background:linear-gradient(135deg,#fff,#4a90d9,#fff)"></span>Chrome</span>
+          <span class="finish-price">+ ৳1,80,000</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <h3>Rims</h3>
+      <div class="part-row" id="rimRow"></div>
+    </div>
+
+    <div class="sb-section">
+      <h3>Body Kit</h3>
+      <div class="part-row">
+        <div class="part-chip disabled">
+          <div class="part-chip-name">Stock Body</div>
+          <div class="part-chip-tag">Coming soon</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sb-section" id="spoilerSection">
+      <h3>Spoiler</h3>
+      <div class="part-row" id="spoilerRow"></div>
+    </div>
+
+    <div class="sb-section">
+      <h3>Seats</h3>
+      <div class="part-row">
+        <div class="part-chip disabled">
+          <div class="part-chip-name">Stock Seats</div>
+          <div class="part-chip-tag">Coming soon</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <h3>Price</h3>
+      <div class="price-box">
+        <div class="price-row"><span>Paint</span><span id="paintPriceRow">৳0</span></div>
+        <div class="price-row"><span>Finish</span><span id="finishPriceRow">Included</span></div>
+        <div class="price-total"><span>Total</span><span id="totalPriceRow">৳0</span></div>
+        <button class="confirm-btn" onclick="openPayment()">Confirm & Pay</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="camera-hud">
+    <div class="angle-row">
+      <button class="angle-btn active" onclick="setAngle('three', this)">3/4</button>
+      <button class="angle-btn" onclick="setAngle('front', this)">Front</button>
+      <button class="angle-btn" onclick="setAngle('side', this)">Side</button>
+      <button class="angle-btn" onclick="setAngle('rear', this)">Rear</button>
+    </div>
+    <div class="spin-toggle" onclick="toggleSpin()">
+      <div class="spin-dot on" id="spinDot"></div>
+      <span id="spinLabel">Auto-rotate on</span>
+    </div>
+  </div>
+
+  <button class="exit-view-btn" id="exitViewBtn" onclick="exitViewMode()">&larr; Exit View · Customize This Car</button>
+
+  <div class="carousel-wrap">
+    <div class="carousel-label-row">
+      <div class="carousel-label">Select Car</div>
+      <div class="carousel-arrows">
+        <button class="carousel-arrow" id="carPrev" aria-label="Previous car">&#10094;</button>
+        <button class="carousel-arrow" id="carNext" aria-label="Next car">&#10095;</button>
+      </div>
+    </div>
+    <div class="carousel-viewport">
+      <div class="carousel" id="carCarousel"></div>
+    </div>
+  </div>
+
+  <div class="credit">
+    3D models: <strong>"Lamborghini Aventador"</strong> by Outlaw Games™ (<a href="http://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>)
+    and <strong>"2018 Garage Mak Nissan S15 Silvia"</strong> by Reggie Mah / Ddiaz Design (<a href="http://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener">CC BY-NC-SA 4.0</a>).
+    Non-commercial educational use only.
+  </div>
+
+  <div id="loading">
+    <span id="loadingText">LOADING GARAGE ASSET…</span>
+    <div class="loadbar"><span></span></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <button class="modal-close" onclick="closePayment()">&times;</button>
+
+    <div class="modal-step active" id="payStep1">
+      <div class="modal-eyebrow">Order Summary</div>
+      <h3>Confirm Your Build</h3>
+      <div class="modal-summary-row"><span>Car</span><span id="sumCar">—</span></div>
+      <div class="modal-summary-row"><span>Paint</span><span id="sumPaint">—</span></div>
+      <div class="modal-summary-row"><span>Finish</span><span id="sumFinish">—</span></div>
+      <div class="modal-summary-total"><span>Total</span><span id="sumTotal">৳0</span></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closePayment()">Cancel</button>
+        <button class="btn-primary" onclick="payStep(2)">Proceed to Payment</button>
+      </div>
+    </div>
+
+    <div class="modal-step" id="payStep2">
+      <div class="modal-eyebrow">Step 2 of 2</div>
+      <h3>Payment Details</h3>
+      <div class="form-field">
+        <label>Full Name</label>
+        <input type="text" id="payName" placeholder="Your name">
+      </div>
+      <div class="form-field">
+        <label>Phone Number</label>
+        <input type="text" id="payPhone" placeholder="01XXXXXXXXX">
+      </div>
+      <div class="form-field">
+        <label>Payment Method</label>
+        <div class="pay-method-row">
+          <div class="pay-method selected" data-method="bkash" onclick="selectPayMethod(this)">bKash</div>
+          <div class="pay-method" data-method="nagad" onclick="selectPayMethod(this)">Nagad</div>
+          <div class="pay-method" data-method="card" onclick="selectPayMethod(this)">Card</div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="payStep(1)">Back</button>
+        <button class="btn-primary" onclick="payStep(3)">Confirm Payment</button>
+      </div>
+    </div>
+
+    <div class="modal-step" id="payStep3">
+      <div class="modal-confirm">
+        <div class="icon">✓</div>
+        <h3 style="text-align:center;">Request Received</h3>
+        <p>This is a demo checkout — no real payment was processed. In the real KAIDO platform, your concierge would now confirm this build and begin sourcing.</p>
+        <button class="btn-primary" style="width:100%;" onclick="closePayment()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
+
+const stage = document.getElementById('stageWrap');
+const canvasHost = document.getElementById('canvasHost');
+const loadingEl = document.getElementById('loading');
+const loadingTextEl = document.getElementById('loadingText');
+const flashEl = document.getElementById('flash');
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+scene.fog = new THREE.Fog(0x000000, 10, 22);
+
+const camera = new THREE.PerspectiveCamera(32, stage.clientWidth/stage.clientHeight, 0.01, 100);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(stage.clientWidth, stage.clientHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.28;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+canvasHost.appendChild(renderer.domElement);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.14).texture;
+
+const hemi = new THREE.HemisphereLight(0xffffff, 0x3a3b42, 0.9);
+scene.add(hemi);
+const key = new THREE.DirectionalLight(0xffffff, 1.75);
+key.position.set(5, 7, 4);
+key.castShadow = true;
+key.shadow.mapSize.set(1024,1024);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xffffff, 1.3);
+fill.position.set(-5, 3, -4);
+scene.add(fill);
+
+// The floor reflection re-renders the whole scene a second time into this
+// texture every single frame, so its resolution matters a lot for
+// performance. It only needs to look like a soft, blurry studio-floor
+// reflection - not a crisp mirror - so we deliberately keep it modest
+// (capped, and based on the actual 3D viewport rather than the full
+// browser window) instead of matching the main render resolution.
+const reflectorRes = Math.min(1024, stage.clientWidth, stage.clientHeight * 1.4);
+const reflector = new Reflector(new THREE.CircleGeometry(14, 64), {
+  clipBias: 0.003,
+  textureWidth: reflectorRes,
+  textureHeight: reflectorRes,
+  color: 0x151515,
+});
+reflector.rotation.x = -Math.PI/2;
+reflector.position.y = 0;
+scene.add(reflector);
+
+const groundShadow = new THREE.Mesh(
+  new THREE.CircleGeometry(14, 64),
+  new THREE.ShadowMaterial({ opacity:0.5 })
+);
+groundShadow.rotation.x = -Math.PI/2;
+groundShadow.position.y = 0.002;
+groundShadow.receiveShadow = true;
+scene.add(groundShadow);
+
+// Glowing white neon-tube frame around the car, like a studio light rig -
+// this is the actual light-shape look we're matching, not a flat overlay.
+const barMat = new THREE.MeshStandardMaterial({ color:0x0a0a0a, emissive:0xffffff, emissiveIntensity:3.2, roughness:0.35 });
+function addBar(length, x, y, z, rotY, rotZ){
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(length, 0.055, 0.055), barMat);
+  bar.position.set(x, y, z);
+  bar.rotation.y = rotY;
+  bar.rotation.z = rotZ;
+  scene.add(bar);
+}
+addBar(9, 0, 3.6, -3, 0.5, 0.3);
+addBar(8, 0, 2.4, -3.5, -0.6, -0.25);
+addBar(7.5, 0, 4.6, 2.5, 0.9, 0.15);
+addBar(8.5, 0, 1.6, 3, -0.4, -0.35);
+addBar(6.5, 0, 5.2, 0, 0.2, 0.5);
+addBar(7, 0, 1.0, -2.5, -0.8, 0.4);
+addBar(6, 0, 5.6, 3.5, 0.7, -0.2);
+
+// Tighter, shorter bars in close around the car itself, like the ones that
+// nearly touch the body in the reference shot, rather than only forming a
+// distant backdrop frame.
+addBar(4.5, 0, 1.7, -1.6, 0.55, 0.32);
+addBar(4, 0, 1.1, 1.7, -0.5, -0.3);
+addBar(5, 0, 2.4, -1.3, 0.35, 0.22);
+addBar(3.6, 0, 0.7, 1.4, -0.7, 0.28);
+addBar(5.2, 0, 3.0, 1.6, 0.3, -0.4);
+addBar(4, 0, 0.55, -1.8, -0.3, 0.5);
+addBar(3.2, 0, 2.0, 1.1, -0.65, 0.4);
+addBar(3.4, 0, 0.9, -1.2, 0.6, -0.35);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 2;
+controls.maxDistance = 12;
+controls.maxPolarAngle = Math.PI * 0.49;
+controls.target.set(0, 0.4, 0);
+
+let autoSpin = true;
+let modelRadius = 3;
+
+window.toggleSpin = function(){
+  autoSpin = !autoSpin;
+  document.getElementById('spinDot').classList.toggle('on', autoSpin);
+  document.getElementById('spinLabel').textContent = 'Auto-rotate ' + (autoSpin ? 'on' : 'off');
+};
+
+let tweenActive = false;
+let tweenStart = new THREE.Vector3();
+let tweenEnd = new THREE.Vector3();
+let tweenTargetStart = new THREE.Vector3();
+let tweenTargetEnd = new THREE.Vector3();
+let tweenT = 0;
+
+function anglePositions(r){
+  return {
+    front: new THREE.Vector3(0, 0.55*r*0.5, r*1.15),
+    side:  new THREE.Vector3(r*1.15, 0.55*r*0.5, 0),
+    rear:  new THREE.Vector3(0, 0.55*r*0.5, -r*1.15),
+    three: new THREE.Vector3(r*0.85, 0.65*r*0.5, r*0.85),
+  };
+}
+
+window.setAngle = function(name, btn){
+  document.querySelectorAll('.angle-btn').forEach(b => b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  const positions = anglePositions(modelRadius);
+  tweenStart.copy(camera.position);
+  tweenEnd.copy(positions[name]);
+  tweenTargetStart.copy(controls.target);
+  tweenTargetEnd.set(0, controls.target.y, 0);
+  tweenT = 0;
+  tweenActive = true;
+  autoSpin = false;
+  document.getElementById('spinDot').classList.remove('on');
+  document.getElementById('spinLabel').textContent = 'Auto-rotate off';
+};
+
+let paintMaterials = [];
+let currentRimId = 'stock';
+let wheelClusters = [];
+let hiddenWheelMeshes = [];
+let rimClones = [];
+let rimTemplateCache = {};
+let currentSpoilerId = 'none';
+let spoilerClone = null;
+let spoilerTemplateCache = {};
+let spoilerAnchor = null;
+let currentColorHex = '#c81c2e';
+let brightnessFactor = 1.0;
+let currentFinish = 'gloss';
+let currentModel = null;
+let currentCarId = null;
+let currentPaintPrice = 0;
+let currentFinishPrice = 0;
+let currentPaintLabel = 'Signature Rosso';
+
+function fmtBDT(n){
+  if (n === 0) return '৳0';
+  return '৳' + n.toLocaleString('en-IN');
+}
+
+function updatePaintMaterials(){
+  paintMaterials.forEach(m => {
+    m.map = null;
+    const c = new THREE.Color(currentColorHex);
+    c.multiplyScalar(brightnessFactor);
+    m.color.copy(c);
+    m.needsUpdate = true;
+  });
+  updateRating();
+  updatePriceDisplay();
+}
+
+function doFlash(){
+  flashEl.classList.remove('go');
+  void flashEl.offsetWidth;
+  flashEl.classList.add('go');
+}
+
+window.pickPaint = function(el, hex, price){
+  document.querySelectorAll('#swatchRow .swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  currentColorHex = hex;
+  currentPaintPrice = price;
+  currentPaintLabel = hex;
+  document.getElementById('customColor').value = hex;
+  updatePaintMaterials();
+  doFlash();
+};
+
+window.onCustomColor = function(hex){
+  document.querySelectorAll('#swatchRow .swatch').forEach(s => s.classList.remove('active'));
+  currentColorHex = hex;
+  currentPaintPrice = 40000;
+  currentPaintLabel = hex + ' (custom)';
+  updatePaintMaterials();
+};
+
+window.onBrightness = function(val){
+  brightnessFactor = val / 100;
+  document.getElementById('brightVal').textContent = val + '%';
+  updatePaintMaterials();
+};
+
+const finishPresets = {
+  gloss:    { roughness:0.35, metalness:0.05, clearcoat:1.0, clearcoatRoughness:0.05, envMapIntensity:1.0 },
+  matte:    { roughness:0.85, metalness:0.0,  clearcoat:0.0, clearcoatRoughness:0.0,  envMapIntensity:0.6 },
+  metallic: { roughness:0.35, metalness:0.75, clearcoat:0.3, clearcoatRoughness:0.25, envMapIntensity:1.1 },
+  chrome:   { roughness:0.12, metalness:1.0,  clearcoat:1.0, clearcoatRoughness:0.08, envMapIntensity:2.8 },
+};
+
+function applyFinish(type){
+  const p = finishPresets[type];
+  paintMaterials.forEach(m => {
+    m.roughness = p.roughness;
+    m.metalness = p.metalness;
+    m.envMapIntensity = p.envMapIntensity;
+    if (m.isMeshPhysicalMaterial){
+      m.clearcoat = p.clearcoat;
+      m.clearcoatRoughness = p.clearcoatRoughness;
+    }
+    m.needsUpdate = true;
+  });
+}
+
+window.setFinish = function(type, btn, price){
+  document.getElementById('finishRow').querySelectorAll('.finish-btn').forEach(b => b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  currentFinish = type;
+  currentFinishPrice = price || 0;
+  applyFinish(type);
+  updateRating();
+  updatePriceDisplay();
+};
+
+function updateRating(){
+  let score = 1;
+  if (currentFinish !== 'gloss') score++;
+  if (currentPaintPrice > 0) score++;
+  const bars = document.querySelectorAll('#ratingBars i');
+  bars.forEach((b,i) => b.classList.toggle('on', i < score));
+}
+
+function updatePriceDisplay(){
+  document.getElementById('paintPriceRow').textContent = fmtBDT(currentPaintPrice);
+  document.getElementById('finishPriceRow').textContent = currentFinishPrice === 0 ? 'Included' : fmtBDT(currentFinishPrice);
+  document.getElementById('totalPriceRow').textContent = fmtBDT(currentPaintPrice + currentFinishPrice);
+}
+
+let selectedPayMethod = 'bkash';
+window.selectPayMethod = function(el){
+  document.querySelectorAll('.pay-method').forEach(p => p.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedPayMethod = el.dataset.method;
+};
+
+window.openPayment = function(){
+  const cfg = carConfigs[currentCarId];
+  document.getElementById('sumCar').textContent = cfg ? cfg.name : '—';
+  document.getElementById('sumPaint').textContent = currentPaintLabel + ' — ' + fmtBDT(currentPaintPrice);
+  document.getElementById('sumFinish').textContent = currentFinish.charAt(0).toUpperCase() + currentFinish.slice(1) + ' — ' + (currentFinishPrice === 0 ? 'Included' : fmtBDT(currentFinishPrice));
+  document.getElementById('sumTotal').textContent = fmtBDT(currentPaintPrice + currentFinishPrice);
+  document.getElementById('modalOverlay').classList.add('active');
+  payStep(1);
+};
+window.closePayment = function(){
+  document.getElementById('modalOverlay').classList.remove('active');
+};
+window.payStep = function(n){
+  document.querySelectorAll('.modal-step').forEach(s => s.classList.remove('active'));
+  document.getElementById('payStep'+n).classList.add('active');
+};
+document.getElementById('modalOverlay').addEventListener('click', (e) => {
+  if (e.target.id === 'modalOverlay') window.closePayment();
+});
+
+const carConfigs = {
+  lambo: {
+    name: 'Lamborghini Aventador',
+    tag: 'V12 · 700 HP',
+    swatchColor: '#8a1420',
+    badge: 'AV',
+    elementId: 'modelDataLambo',
+    isPaintMesh(child){
+      const mn = (child.material && child.material.name) || '';
+      return /^RED_PAINT$/i.test(mn);
+    },
+    isTrustedMesh(child){
+      const mn = (child.material && child.material.name) || '';
+      return /wheel/i.test(mn) || /^RED_PAINT$/i.test(mn);
+    },
+    isWheelMesh(child){
+      const mn = (child.material && child.material.name) || '';
+      return /wheel.*3d/i.test(mn);
+    },
+    isTireMesh(){
+      return false;
+    }
+  },
+  silvia: {
+    name: 'Nissan Silvia S15',
+    tag: 'Garage Mak Widebody',
+    swatchColor: '#123a5c',
+    badge: 'S15',
+    elementId: 'modelDataSilvia',
+    isPaintMesh(child){
+      const nn = child.name || '';
+      return /carpaint/i.test(nn) && !/trim/i.test(nn);
+    },
+    isTrustedMesh(child){
+      const nn = child.name || '';
+      return /carpaint/i.test(nn) && !/trim/i.test(nn);
+    },
+    isWheelMesh(child){
+      const mn = (child.material && child.material.name) || '';
+      return /wheel.*3d/i.test(mn);
+    },
+    isTireMesh(child){
+      const mn = (child.material && child.material.name) || '';
+      return /^ntire/i.test(mn);
+    }
+  },
+  prius: {
+    name: 'Toyota Prius 2012',
+    tag: 'Hybrid · Fuel Sipper',
+    swatchColor: '#4d5f5a',
+    badge: 'PRI',
+    elementId: 'modelDataPrius',
+    // Clean, descriptively-named materials here - "Color.002" is the
+    // single merged body-paint mesh, and the wheel rim/tire assembly is
+    // combined across two materials that each span the full car
+    // width/length (all 4 wheels merged into one mesh per material,
+    // like the Silvia). A third candidate, "Wheel1Mtl", turned out on
+    // closer inspection to be some other, non-symmetric part - its
+    // geometry is wildly uneven across the four corners (one corner
+    // nearly empty, the other three spanning almost the car's full
+    // length) rather than four matching wheel shapes - so including it
+    // was corrupting the size calculation for whichever wheel it
+    // skewed toward, making that one balloon in size. Left out now.
+    isPaintMesh(child){
+      const mn = (child.material && child.material.name) || '';
+      return /^Color\.002$/i.test(mn);
+    },
+    isWheelMesh(child){
+      const mn = (child.material && child.material.name) || '';
+      return /^(Rims\.002|Wheel0021Mtl\.002)$/i.test(mn);
+    },
+    isTireMesh(){
+      return false;
+    },
+    isTrustedMesh(child){
+      return this.isWheelMesh(child) || this.isPaintMesh(child);
+    }
+  },
+  priusc: {
+    name: '2012 Toyota Prius C',
+    tag: 'Subcompact Hybrid',
+    swatchColor: '#ff3100',
+    badge: 'PRC',
+    elementId: 'modelDataPriusC',
+    // Requested spoiler mount to sit a bit higher specifically on this
+    // car - scoped here rather than touching the shared spoiler-part
+    // tuning, so it has zero effect on any other car.
+    spoilerHeightBoost: 0.08,
+    spoilerZBoost: 0.03, // shifts the spoiler a bit further toward the rear on this car specifically
+    // Clean, descriptively-named materials again - "Color" is the body
+    // paint (confirmed by its bright orange baseColorFactor matching
+    // this exact swatch), and "Tire" is a single mesh that spans nearly
+    // the car's full length - confirmed by checking its world-space
+    // bounding box directly - meaning all 4 wheels (rim + tire together
+    // this time, not split across materials) are merged into that one
+    // mesh, same pattern as the original Prius and the Silvia.
+    isPaintMesh(child){
+      const mn = (child.material && child.material.name) || '';
+      return /^Color$/i.test(mn);
+    },
+    isWheelMesh(child){
+      const mn = (child.material && child.material.name) || '';
+      return /^Tire$/i.test(mn);
+    },
+    isTireMesh(){
+      return false;
+    },
+    isTrustedMesh(child){
+      return this.isWheelMesh(child) || this.isPaintMesh(child);
+    }
+  },
+  chr: {
+    name: 'Toyota C-HR',
+    tag: 'Crossover Coupe',
+    swatchColor: '#c9c9c9',
+    badge: 'CHR',
+    elementId: 'modelDataCHR',
+    // The cleanest material set of any car so far - properly separated,
+    // descriptively named, and each wheel-related material has exactly
+    // 4 instances. Confirmed via world-space centroids that all four
+    // wheel materials (tire, rim, brake disc, and a small hub/bolt part)
+    // cleanly cluster at the four corners with no stray geometry, so
+    // all four hide together for a complete stock-wheel swap, unlike
+    // some earlier cars where one of these turned out to be a
+    // mismatched or asymmetric part.
+    isPaintMesh(child){
+      const mn = (child.material && child.material.name) || '';
+      return /^carpaint$/i.test(mn);
+    },
+    isWheelMesh(child){
+      const mn = (child.material && child.material.name) || '';
+      return /^(tire|rim_second|brakedisk|material)$/i.test(mn);
+    },
+    isTireMesh(){
+      return false;
+    },
+    isTrustedMesh(child){
+      return this.isWheelMesh(child) || this.isPaintMesh(child);
+    }
+  },
+  rx8: {
+    name: '2006 Mazda RX-8',
+    tag: 'Rotary · Sport Coupe',
+    swatchColor: '#6b0000',
+    badge: 'RX8',
+    elementId: 'modelDataRX8',
+    // Spoiler removed entirely for this car per request - hides the
+    // whole Spoiler sidebar section rather than leaving mistuned
+    // options visible. The tuning values below are kept (harmless while
+    // unused) in case the spoiler gets re-enabled for this car later.
+    disableSpoiler: true,
+    // Requested the spoiler a bit bigger and mounted at the actual rear
+    // of this car specifically - it was landing at the wrong end, so
+    // flipping the measured rear direction just for this car (scoped
+    // the same way as the Prius C's height/position tweaks, with zero
+    // effect on any other car).
+    spoilerScaleBoost: 1.35,
+    spoilerRearFlip: true,
+    // Reference photo showed a low, flush-mounted lip spoiler sitting
+    // right on the trunk lid rather than raised on struts - pulling the
+    // height down and tucking it slightly further onto the deck to
+    // match that look.
+    spoilerHeightBoost: -0.09,
+    spoilerZBoost: -0.01,
+    // Materials are named clearly (if with a typo - "CaarPaint" not
+    // "CarPaint") and the wheel assembly is split across four merged
+    // meshes (tire, rim, brake disc, and caliper), each a single mesh
+    // instance. Checked their raw local bounding boxes directly and all
+    // four share consistent width/length proportions matching a merged
+    // 4-wheel spread, with no asymmetric outlier like the Prius's
+    // Wheel1Mtl - so all four hide together for a complete stock-wheel
+    // swap.
+    isPaintMesh(child){
+      const mn = (child.material && child.material.name) || '';
+      return /^CaarPaint$/i.test(mn);
+    },
+    isWheelMesh(child){
+      const mn = (child.material && child.material.name) || '';
+      return /^(Tire|Rims|Breaks|Calipers)$/i.test(mn);
+    },
+    isTireMesh(){
+      return false;
+    },
+    isTrustedMesh(child){
+      return this.isWheelMesh(child) || this.isPaintMesh(child);
+    }
+  }
+};
+
+const rimOptions = {
+  stock: {
+    name: 'Stock Wheels',
+    tag: 'Factory fitment'
+  },
+  lambosc20: {
+    name: 'SC20 Aero Wheel',
+    tag: 'Forged + tire, ready to mount',
+    elementId: 'modelDataRimSC20',
+    includesTire: true,
+    // This particular scan has a stray branding-decal mesh sitting far away
+    // from the wheel itself (leftover from the source scene it was cut
+    // from). It must never render and must be excluded before we measure
+    // the model's bounding box, or it silently drags the axle/diameter
+    // math way off.
+    excludeMaterials: ['Chrome_Text_Logo'],
+    // The model's real disc-shaped components (rim spokes, brake rotor,
+    // caliper) are consistently thin along local Z - but the tire/tread
+    // meshes are irregular enough that the generic "thinnest AABB axis"
+    // guess isn't reliable here, so pin it explicitly instead of guessing.
+    axleAxis: 'z',
+    // The stock scan sits exactly flush with the wheel well. Bumping this
+    // up a bit fills the arch out more and gives the tire sidewall a
+    // fuller, more aggressive look that suits the car better.
+    fitScale: 1.12
+  },
+  tunerWheel: {
+    name: 'Tuner Deep Dish',
+    tag: 'Forged + tire, ready to mount',
+    elementId: 'modelDataRimTuner',
+    includesTire: true,
+    // Same story as the SC20 wheel: this scan carries a stray oversized
+    // logo/decal mesh that isn't part of the actual wheel geometry and
+    // would badly skew the bounding-box math if left in.
+    excludeMaterials: ['Logo']
+    // No axleAxis override needed here - unlike the SC20 scan, this one's
+    // real geometry (once the stray logo mesh is excluded) is cleanly
+    // thin along a single axis, so the generic auto-detect gets it right.
+  },
+  f1Wheel: {
+    name: 'F1 Racing Wheel',
+    tag: 'Forged + tire, ready to mount',
+    elementId: 'modelDataRimF1',
+    includesTire: true
+    // Cleanest scan of the three: already centered on its own origin,
+    // no stray meshes, and cleanly thin along one axis - no exclusions
+    // or axle overrides needed.
+  },
+  bbsRS16: {
+    name: 'BBS RS16',
+    tag: 'Forged + tire, ready to mount',
+    elementId: 'modelDataRimBBS',
+    includesTire: true,
+    // This scan carries two stray meshes way outside the actual wheel
+    // (a "D2Logo" decal and a large unrelated "Material.001" chunk) -
+    // both must be stripped before measuring, or the bounding-box math
+    // (and therefore scale/position) goes badly wrong. Once excluded,
+    // the remaining geometry is a clean, tightly-centered wheel+tire
+    // that's thin along Y, so the generic auto-detect handles axle
+    // direction correctly on its own.
+    excludeMaterials: ['D2Logo', 'Material.001']
+  }
+};
+
+const spoilerOptions = {
+  none: {
+    name: 'No Spoiler',
+    tag: 'Stock deck'
+  },
+  aggressiveWing: {
+    name: 'Aggressive GT Wing',
+    tag: 'Adjustable rear wing',
+    elementId: 'modelDataSpoilerWing',
+    // This scan isn't authored to match any particular car's proportions,
+    // so instead of a fixed scale/position we size and place it relative
+    // to whichever car is currently loaded - same idea as the rim engine
+    // sizing wheels off the car's own wheel wells.
+    widthRatio: 0.42,   // wing span as a fraction of the car's overall width
+    zInset: -0.004,     // reduced from -0.015 - shifting further from the measured anchor point means landing on a lower part of the sloped roof, which was the real cause of the gap
+    mountOffsetY: -0.12, // pushed down harder - previous -0.03 still left a visible gap between the strut and the roof
+    // rotationY is now computed automatically from the detected anchor
+    // position (see findSpoilerAnchor / applySpoiler) - no longer needs
+    // to be guessed and hardcoded here. Can still set explicitly to
+    // override if the auto-detected facing is ever wrong.
+  },
+  lipSpoiler: {
+    name: 'Track Lip Spoiler',
+    tag: 'Low-profile deck lip',
+    elementId: 'modelDataSpoilerLip',
+    // This scan's proportions are very different from the GT wing above -
+    // extremely wide and flat (its own raw dimensions are roughly
+    // 1521 x 303 x 160, vs the GT wing's roughly 3 x 1.9 x 4.7), more
+    // like a low sport lip than a raised multi-strut wing. Starting from
+    // the same tuned mount values as the GT wing since they share the
+    // same mounting engine, but this one may need its own adjustment
+    // once you see it - its shape is different enough that the same
+    // numbers aren't guaranteed to land perfectly.
+    widthRatio: 0.52,
+    zInset: -0.004,
+    mountOffsetY: -0.12,
+    // This scan has no authored color or texture at all (checked the
+    // raw file directly - the material has no baseColorFactor and no
+    // baseColorTexture), so it renders plain white by default. Tinting
+    // it black here since that's the color it was actually meant to be.
+    forceColor: '#0d0d0d',
+  }
+};
+
+function base64ToArrayBuffer(base64){
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++){
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function disposeMaterial(m){
+  for (const key in m){
+    const val = m[key];
+    if (val && val.isTexture) val.dispose();
+  }
+  m.dispose();
+}
+
+function clearCurrentCar(){
+  clearRimClones();
+  clearSpoilerClone();
+  hiddenWheelMeshes = [];
+  wheelClusters = [];
+  spoilerAnchor = null;
+  if (currentModel){
+    scene.remove(currentModel);
+    currentModel.traverse(child => {
+      if (child.isMesh){
+        if (child.geometry) child.geometry.dispose();
+        if (child.material){
+          if (Array.isArray(child.material)) child.material.forEach(disposeMaterial);
+          else disposeMaterial(child.material);
+        }
+      }
+    });
+    currentModel = null;
+  }
+  paintMaterials = [];
+}
+
+function loadCarById(carId){
+  const cfg = carConfigs[carId];
+  currentCarId = carId;
+  loadingEl.style.display = 'flex';
+  loadingTextEl.textContent = 'LOADING ' + cfg.name.toUpperCase() + '…';
+
+  clearCurrentCar();
+
+  const base64 = document.getElementById(cfg.elementId).textContent;
+  const arrayBuffer = base64ToArrayBuffer(base64);
+  const loader = new GLTFLoader();
+
+  loader.parse(arrayBuffer, '', (gltf) => {
+    const model = gltf.scene;
+
+    const box = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = 2.6 / maxDim;
+    model.scale.setScalar(scale);
+    model.updateMatrixWorld(true);
+
+    const trustedBox = new THREE.Box3();
+    let hasTrusted = false;
+
+    model.traverse((child) => {
+      if (child.isMesh){
+        child.castShadow = true;
+        child.receiveShadow = true;
+        if (cfg.isPaintMesh(child)){
+          paintMaterials.push(child.material);
+        }
+        if (cfg.isTrustedMesh(child)){
+          trustedBox.expandByObject(child);
+          hasTrusted = true;
+        }
+      }
+    });
+
+    if (!hasTrusted){ trustedBox.setFromObject(model); }
+
+    const center = new THREE.Vector3();
+    trustedBox.getCenter(center);
+    model.position.x -= center.x;
+    model.position.z -= center.z;
+    model.position.y -= trustedBox.min.y;
+    model.updateMatrixWorld(true);
+
+    scene.add(model);
+    currentModel = model;
+
+    wheelClusters = computeWheelClusters(model, cfg);
+    spoilerAnchor = findSpoilerAnchor(model, cfg);
+    currentRimId = 'stock';
+    document.querySelectorAll('#rimRow .part-chip').forEach(c => {
+      c.classList.toggle('active', c.dataset.rim === 'stock');
+    });
+    currentSpoilerId = 'none';
+    document.querySelectorAll('#spoilerRow .part-chip').forEach(c => {
+      c.classList.toggle('active', c.dataset.spoiler === 'none');
+    });
+    clearSpoilerClone();
+    const spoilerSectionEl = document.getElementById('spoilerSection');
+    if (spoilerSectionEl){
+      spoilerSectionEl.style.display = cfg.disableSpoiler ? 'none' : '';
+    }
+
+    const size3 = new THREE.Vector3();
+    trustedBox.getSize(size3);
+    modelRadius = Math.max(size3.x, size3.z) * 1.1;
+
+    applyFinish(currentFinish);
+    updatePaintMaterials();
+
+    const positions = anglePositions(modelRadius);
+    camera.position.copy(positions.three);
+    controls.target.set(0, size3.y*0.35, 0);
+
+    loadingEl.style.display = 'none';
+  }, (err) => {
+    loadingTextEl.textContent = 'COULD NOT LOAD MODEL';
+    console.error(err);
+  });
+}
+
+// --- Rim swap engine -------------------------------------------------
+// Groups all meshes matched by cfg.isWheelMesh() into 4 world-space
+// clusters (front-left/front-right/rear-left/rear-right) by sampling
+// vertex positions and splitting on X (left/right) then Z (front/rear).
+// Finds the single highest point on the car's exterior bodywork (paint,
+// trim, carbon parts - excluding glass, interior, wheels/tires). For a
+// car with a raised fixed rear wing (like the SVJ), that highest point
+// IS the wing tip, so this gives us a reliable, assumption-free anchor
+// for mounting a replacement spoiler - no need to guess which end of the
+// car is "front" vs "rear" in its local coordinate system.
+function findSpoilerAnchor(model, cfg){
+  let maxY = -Infinity;
+  const anchor = new THREE.Vector3(0, 0, 0);
+  const tmp = new THREE.Vector3();
+  model.updateMatrixWorld(true);
+  model.traverse((child) => {
+    if (!child.isMesh || !child.geometry) return;
+    if (cfg.isWheelMesh && cfg.isWheelMesh(child)) return;
+    if (cfg.isTireMesh && cfg.isTireMesh(child)) return;
+    const mn = (child.material && child.material.name) || '';
+    if (/glass|window|interior|seat|engine|plate|badge/i.test(mn)) return;
+    const posAttr = child.geometry.attributes && child.geometry.attributes.position;
+    if (!posAttr) return;
+    const step = Math.max(1, Math.floor(posAttr.count / 400));
+    for (let i = 0; i < posAttr.count; i += step){
+      tmp.fromBufferAttribute(posAttr, i);
+      tmp.applyMatrix4(child.matrixWorld);
+      if (tmp.y > maxY){
+        maxY = tmp.y;
+        anchor.copy(tmp);
+      }
+    }
+  });
+  return anchor;
+}
+
+function computeWheelClusters(model, cfg){
+  const pts = [];
+  model.traverse((child) => {
+    if (child.isMesh && cfg.isWheelMesh(child)){
+      child.updateWorldMatrix(true, false);
+      const posAttr = child.geometry.attributes.position;
+      const step = Math.max(1, Math.floor(posAttr.count / 300));
+      const v = new THREE.Vector3();
+      for (let i = 0; i < posAttr.count; i += step){
+        v.fromBufferAttribute(posAttr, i).applyMatrix4(child.matrixWorld);
+        pts.push(v.clone());
+      }
+    }
+  });
+  if (!pts.length) return [];
+
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+  const leftPts = pts.filter(p => p.x >= cx);
+  const rightPts = pts.filter(p => p.x < cx);
+
+  function splitZ(arr){
+    if (!arr.length) return [[], []];
+    const cz = arr.reduce((s, p) => s + p.z, 0) / arr.length;
+    return [arr.filter(p => p.z >= cz), arr.filter(p => p.z < cz)];
+  }
+  const [lf, lr] = splitZ(leftPts);
+  const [rf, rr] = splitZ(rightPts);
+
+  function info(arr){
+    if (!arr.length) return null;
+    const box = new THREE.Box3();
+    arr.forEach(p => box.expandByPoint(p));
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    // Don't assume the car's axle runs along world X - measure it. A wheel is
+    // round, so two of the three box dimensions (the diameter, front-to-back
+    // and top-to-bottom) will be roughly equal and much bigger than the third
+    // (the tire's width, which runs along the actual axle). Whichever world
+    // axis comes out smallest here IS the real axle direction for this car.
+    const dims = [
+      { vec: new THREE.Vector3(1, 0, 0), val: size.x },
+      { vec: new THREE.Vector3(0, 1, 0), val: size.y },
+      { vec: new THREE.Vector3(0, 0, 1), val: size.z },
+    ];
+    dims.sort((a, b) => a.val - b.val);
+    const diameter = (dims[1].val + dims[2].val) / 2;
+    return {
+      center,
+      diameter: diameter || 1,
+      width: dims[0].val || diameter * 0.35,
+      side: Math.sign(center.x) || 1,
+      axleVec: dims[0].vec,
+    };
+  }
+  return [info(lf), info(lr), info(rf), info(rr)].filter(Boolean);
+}
+
+function hideWheelAssembly(cfg){
+  hiddenWheelMeshes = [];
+  currentModel.traverse((child) => {
+    if (child.isMesh && (cfg.isWheelMesh(child) || cfg.isTireMesh(child))){
+      child.visible = false;
+      hiddenWheelMeshes.push(child);
+    }
+  });
+}
+
+function showWheelAssembly(){
+  hiddenWheelMeshes.forEach(m => { m.visible = true; });
+  hiddenWheelMeshes = [];
+}
+
+function clearRimClones(){
+  rimClones.forEach(o => { if (o.parent) o.parent.remove(o); });
+  rimClones = [];
+}
+
+function loadRimTemplate(id, cb){
+  if (rimTemplateCache[id]){ cb(rimTemplateCache[id]); return; }
+  const opt = rimOptions[id];
+  const base64 = document.getElementById(opt.elementId).textContent;
+  const arrayBuffer = base64ToArrayBuffer(base64);
+  const loader = new GLTFLoader();
+  loader.parse(arrayBuffer, '', (gltf) => {
+    const scene = gltf.scene;
+    if (opt.excludeMaterials && opt.excludeMaterials.length){
+      // Some scans carry stray leftover meshes (decals, background bits)
+      // from the original scene they were cut from. Strip them out now so
+      // they never render and never get included when we measure the
+      // model's bounding box for scaling/alignment below.
+      const toRemove = [];
+      scene.traverse((child) => {
+        if (child.isMesh && child.material && opt.excludeMaterials.includes(child.material.name)){
+          toRemove.push(child);
+        }
+      });
+      toRemove.forEach((m) => { if (m.parent) m.parent.remove(m); });
+    }
+    rimTemplateCache[id] = scene;
+    cb(scene);
+  }, (err) => console.error(err));
+}
+
+// Finds which local axis of the rim model is its thin "axle" axis
+// (the one perpendicular to the wheel's face), the same way as above -
+// whichever axis is thinnest is the axle, regardless of how the model
+// happens to be authored/oriented.
+function getAxleInfo(obj, forcedAxis){
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const dims = [
+    { axis: 'x', vec: new THREE.Vector3(1, 0, 0), val: size.x },
+    { axis: 'y', vec: new THREE.Vector3(0, 1, 0), val: size.y },
+    { axis: 'z', vec: new THREE.Vector3(0, 0, 1), val: size.z },
+  ];
+  dims.sort((a, b) => a.val - b.val);
+  // Most bare-rim scans are cleanly thin along one axis (the true axle),
+  // so guessing "thinnest AABB dimension" works fine. Some scans (tire
+  // tread detail, uneven scan noise) don't have one dimension that's
+  // clearly thinnest, so a per-model override lets us pin the correct
+  // axis instead of guessing wrong.
+  let axleIdx = 0;
+  if (forcedAxis){
+    const found = dims.findIndex(d => d.axis === forcedAxis);
+    if (found !== -1) axleIdx = found;
+  }
+  const otherDims = dims.filter((_, i) => i !== axleIdx);
+  const diameter = (otherDims[0].val + otherDims[1].val) / 2;
+  // `center` is the rim model's own geometric center in its local space.
+  // Sketchfab exports are frequently not centered on their local origin
+  // (the mesh can sit far from (0,0,0)), so we must remember this offset
+  // and cancel it out later - otherwise the cloned wheel renders way off
+  // to the side of the hub instead of centered on it ("floating").
+  return { axleVec: dims[axleIdx].vec, diameter: diameter || 1, localCenter: center };
+}
+
+function applyCustomRim(cfg, template, opt){
+  clearRimClones();
+  const axle = getAxleInfo(template, opt && opt.axleAxis);
+  const includesTire = !!(opt && opt.includesTire);
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x0d0d0f, roughness: 0.9, metalness: 0.05 });
+
+  wheelClusters.forEach((cluster) => {
+    // If the model already comes with its own tire (rim + tire + brake as
+    // one assembly), scale it to the wheel's full diameter. Otherwise
+    // (bare rim only) reserve some diameter for a visible tire sidewall.
+    const rimDiameter = includesTire
+      ? cluster.diameter * (opt && opt.fitScale ? opt.fitScale : 1)
+      : cluster.diameter * 0.8;
+
+    const clone = template.clone(true);
+    // Rotate the rim's own axle axis to match THIS car's real axle
+    // direction (front and rear wheels share the same axle axis, but we
+    // compute it fresh per wheel in case the car isn't perfectly axis-aligned).
+    const quat = new THREE.Quaternion().setFromUnitVectors(axle.axleVec, cluster.axleVec);
+    clone.quaternion.copy(quat);
+    const scaleFactor = rimDiameter / axle.diameter;
+    clone.scale.setScalar(scaleFactor);
+    if (cluster.side < 0) clone.scale.x *= -1;
+
+    // Where does the model's own geometric center land after the scale+rotation
+    // above is applied (still relative to the clone's own origin)? Shift the
+    // clone backwards by that amount so the *visual center* of the wheel -
+    // not its arbitrary local origin - lands exactly on the hub position.
+    const centerOffset = axle.localCenter.clone()
+      .multiply(clone.scale)
+      .applyQuaternion(clone.quaternion);
+    clone.position.copy(cluster.center).sub(centerOffset);
+
+    clone.traverse((c) => {
+      if (c.isMesh){
+        c.castShadow = true;
+        c.receiveShadow = true;
+        // A mirrored (negative-scale) clone reverses its triangle winding,
+        // which would make the flipped side invisible under backface
+        // culling. Render both faces so the mirrored wheel doesn't look
+        // like it's missing chunks of geometry.
+        const mats = Array.isArray(c.material) ? c.material : [c.material];
+        mats.forEach(m => { if (m) m.side = THREE.DoubleSide; });
+      }
+    });
+    scene.add(clone);
+    rimClones.push(clone);
+
+    if (includesTire) return;
+
+    // The rim model itself is bare metal with no tire, so build a simple
+    // rubber tire ring that fills the gap between the rim's outer edge and
+    // the wheel's actual total diameter, oriented the same way as the rim.
+    const outerR = cluster.diameter / 2;
+    const innerR = rimDiameter / 2;
+    const tubeR = Math.max((outerR - innerR) / 2, 0.001);
+    const ringR = (outerR + innerR) / 2;
+    const tireWidth = Math.min(cluster.width, tubeR * 2.1);
+    const tireGeo = new THREE.TorusGeometry(ringR, tubeR, 20, 48);
+    tireGeo.scale(1, 1, THREE.MathUtils.clamp(tireWidth / (tubeR * 2), 0.4, 1.6));
+    const tire = new THREE.Mesh(tireGeo, tireMat);
+    tire.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), cluster.axleVec);
+    tire.position.copy(cluster.center);
+    tire.castShadow = true;
+    tire.receiveShadow = true;
+    scene.add(tire);
+    rimClones.push(tire);
+  });
+}
+
+// Smoothly moves the camera to a close-up "inspection" angle on the
+// frontmost wheel, similar to a tuner-photo wheel close-up.
+function focusOnHeroWheel(){
+  if (!wheelClusters.length) return;
+  let hero = wheelClusters[0];
+  wheelClusters.forEach((c) => { if (c.center.z > hero.center.z) hero = c; });
+
+  const r = hero.diameter / 2;
+  const outward = new THREE.Vector3(hero.side, 0, 0);
+  const camPos = hero.center.clone()
+    .add(outward.clone().multiplyScalar(r * 2.6))
+    .add(new THREE.Vector3(0, r * 1.3, r * 1.6));
+  const target = hero.center.clone().add(outward.clone().multiplyScalar(-r * 0.15));
+
+  document.querySelectorAll('.angle-btn').forEach(b => b.classList.remove('active'));
+  tweenStart.copy(camera.position);
+  tweenEnd.copy(camPos);
+  tweenTargetStart.copy(controls.target);
+  tweenTargetEnd.copy(target);
+  tweenT = 0;
+  tweenActive = true;
+  autoSpin = false;
+  document.getElementById('spinDot').classList.remove('on');
+  document.getElementById('spinLabel').textContent = 'Auto-rotate off';
+}
+
+window.selectRim = function(id, el){
+  document.querySelectorAll('#rimRow .part-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  currentRimId = id;
+  const cfg = carConfigs[currentCarId];
+
+  if (id === 'stock'){
+    showWheelAssembly();
+    clearRimClones();
+  } else {
+    hideWheelAssembly(cfg);
+    const opt = rimOptions[id];
+    loadRimTemplate(id, (tmpl) => applyCustomRim(cfg, tmpl, opt));
+  }
+  focusOnHeroWheel();
+};
+
+function buildRimRow(){
+  const wrap = document.getElementById('rimRow');
+  Object.keys(rimOptions).forEach((id) => {
+    const opt = rimOptions[id];
+    const chip = document.createElement('div');
+    chip.className = 'part-chip' + (id === 'stock' ? ' active' : '');
+    chip.dataset.rim = id;
+    chip.innerHTML = `
+      <div class="part-chip-name">${opt.name}</div>
+      <div class="part-chip-tag">${opt.tag}</div>
+    `;
+    chip.onclick = () => window.selectRim(id, chip);
+    wrap.appendChild(chip);
+  });
+}
+buildRimRow();
+
+// --- Spoiler swap engine -----------------------------------------------
+// Same overall approach as the rim engine, but simpler: there's no
+// existing spoiler mesh on either car to hide/detect, so we just mount
+// the chosen part relative to the car's own current bounding box (which
+// is already scaled + centered by loadCarById) rather than hardcoding
+// per-car coordinates. That keeps it working automatically for any car
+// added later, same as the rim system does for wheels.
+
+function loadSpoilerTemplate(id, cb){
+  if (spoilerTemplateCache[id]){ cb(spoilerTemplateCache[id]); return; }
+  const opt = spoilerOptions[id];
+  const base64 = document.getElementById(opt.elementId).textContent;
+  const arrayBuffer = base64ToArrayBuffer(base64);
+  const loader = new GLTFLoader();
+  loader.parse(arrayBuffer, '', (gltf) => {
+    const partScene = gltf.scene;
+    if (opt.excludeMaterials && opt.excludeMaterials.length){
+      const toRemove = [];
+      partScene.traverse((child) => {
+        if (child.isMesh && child.material && opt.excludeMaterials.includes(child.material.name)){
+          toRemove.push(child);
+        }
+      });
+      toRemove.forEach((m) => { if (m.parent) m.parent.remove(m); });
+    }
+    spoilerTemplateCache[id] = partScene;
+    cb(partScene);
+  }, (err) => console.error(err));
+}
+
+function clearSpoilerClone(){
+  if (spoilerClone){
+    scene.remove(spoilerClone);
+    spoilerClone.traverse((child) => {
+      if (child.isMesh){
+        if (child.geometry) child.geometry.dispose();
+        if (child.material){
+          if (Array.isArray(child.material)) child.material.forEach(disposeMaterial);
+          else disposeMaterial(child.material);
+        }
+      }
+    });
+    spoilerClone = null;
+  }
+}
+
+function applySpoiler(opt, template){
+  clearSpoilerClone();
+
+  const clone = template.clone(true);
+  clone.traverse((child) => {
+    if (child.isMesh){
+      child.castShadow = true;
+      child.receiveShadow = true;
+      // Some scans don't carry an authored color/texture at all and
+      // render plain white by default - clone the material (so we never
+      // mutate the cached template shared by future selections) and
+      // tint it if this part config asks for it.
+      if (opt.forceColor){
+        const mat = Array.isArray(child.material) ? child.material.map(m => m.clone()) : child.material.clone();
+        if (Array.isArray(mat)) mat.forEach(m => m.color.set(opt.forceColor));
+        else mat.color.set(opt.forceColor);
+        child.material = mat;
+      }
+    }
+  });
+
+  // Measure the part's own authored size before any scaling, so we can
+  // work out a scale factor relative to the car regardless of whatever
+  // arbitrary units it was modeled in.
+  const rawBox = new THREE.Box3().setFromObject(clone);
+  const rawSize = rawBox.getSize(new THREE.Vector3());
+
+  // The car model is already scaled + centered on the origin at this
+  // point (loadCarById does that on load), so its live bounding box
+  // directly gives us real mount coordinates to target.
+  const carBox = new THREE.Box3().setFromObject(currentModel);
+  const carSize = carBox.getSize(new THREE.Vector3());
+  const carCenter = carBox.getCenter(new THREE.Vector3());
+
+  // A stock integrated wing (like the one already on the car's tail) is
+  // a fairly compact part - nowhere near the full width of the car - so
+  // this default is deliberately conservative rather than a full-width
+  // GT wing.
+  const widthRatio = opt.widthRatio !== undefined ? opt.widthRatio : 0.42;
+  const zInset = opt.zInset !== undefined ? opt.zInset : 0.05;
+
+  let scaleFactor = (carSize.x * widthRatio) / (rawSize.x || 1);
+
+  // Safety net: whatever the scan's raw proportions are, never let the
+  // mounted part end up bigger than the car itself in any dimension.
+  // This is what actually guards against a wildly oversized result if
+  // the width-based scale factor alone under- or over-shoots for a
+  // particular scan's proportions.
+  const maxScaleForHeight = (carSize.y * 0.45) / (rawSize.y || 1);
+  const maxScaleForDepth = (carSize.z * 0.4) / (rawSize.z || 1);
+  scaleFactor = Math.min(scaleFactor, maxScaleForHeight, maxScaleForDepth);
+
+  // Per-car size adjustment, scoped to just the car that asked for it -
+  // applied after the safety clamp above since this is an intentional
+  // request to size up beyond the generic cap, not a bug to guard against.
+  const carSpoilerScaleBoost = (carConfigs[currentCarId] && carConfigs[currentCarId].spoilerScaleBoost) || 1;
+  scaleFactor *= carSpoilerScaleBoost;
+
+  // Which way is "further back, away from the cabin"? Rather than assume
+  // a world axis direction, read it off the measured anchor (the car's
+  // own highest point, i.e. the existing wing tip) relative to the car's
+  // center - whichever side that anchor sits on IS the rear, by
+  // definition, for this specific model.
+  const anchor = spoilerAnchor || new THREE.Vector3(carCenter.x, carBox.max.y, carBox.max.z);
+  // Per-car override for cases where the measured anchor still ends up
+  // on the wrong end for a specific car - scoped so it never affects
+  // any other car's (already-correct) direction.
+  const carRearFlip = (carConfigs[currentCarId] && carConfigs[currentCarId].spoilerRearFlip) ? -1 : 1;
+  const rearSign = (Math.sign(anchor.z - carCenter.z) || 1) * carRearFlip;
+  // This wing's own local geometry has its blade trailing toward local
+  // -Z and its mount/struts toward local +Z. A 180deg spin is needed
+  // whenever the measured rear direction is +Z, so the blade ends up
+  // pointing away from the car (toward the rear) instead of into the cabin.
+  const autoRotationY = rearSign > 0 ? Math.PI : 0;
+  const rotationY = opt.rotationY !== undefined ? opt.rotationY : autoRotationY;
+
+  clone.position.set(0, 0, 0);
+  clone.rotation.set(0, rotationY, 0);
+  clone.scale.setScalar(scaleFactor);
+  clone.updateMatrixWorld(true);
+
+  // Re-measure after scale/rotation to find where the part's own
+  // geometric center and bottom edge actually landed, then shift it so
+  // the strut base sits flush on the target mount height, centered on
+  // the car's centerline, at the target depth. (Sketchfab scans are
+  // rarely centered on their own local origin, so this offset-cancelling
+  // step is necessary rather than trusting position (0,0,0) to be right.)
+  const scaledBox = new THREE.Box3().setFromObject(clone);
+  const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+
+  const targetX = carCenter.x;
+  // Mount height is tied to the anchor's own measured Y - the actual
+  // highest sampled point on the car's real surface - plus a small
+  // configurable nudge, rather than a fixed fraction of total car
+  // height. A fixed fraction happened to work for the Lambo (whose
+  // fixed wing really does sit around there) but isn't a safe bet for
+  // an ordinary roofline. Lowered the nudge here since the wing was
+  // floating just above the actual mount point with a visible gap in
+  // the strut.
+  const mountOffsetY = opt.mountOffsetY !== undefined ? opt.mountOffsetY : 0.02;
+  // Per-car adjustment on top of the per-part mount tuning above - this
+  // is how a height tweak can be scoped to just one specific car
+  // without touching the shared numbers every other car also uses.
+  const carSpoilerBoost = (carConfigs[currentCarId] && carConfigs[currentCarId].spoilerHeightBoost) || 0;
+  const targetY = anchor.y + carSize.y * (mountOffsetY + carSpoilerBoost);
+  // Mount right at (and a touch past) the measured anchor point - the
+  // car's own existing high point - rather than a guessed world-axis end.
+  const carSpoilerZBoost = (carConfigs[currentCarId] && carConfigs[currentCarId].spoilerZBoost) || 0;
+  const zInsetTotal = Math.max(0, Math.abs(zInset) + carSpoilerZBoost);
+  const targetZ = anchor.z + rearSign * carSize.z * zInsetTotal;
+
+  clone.position.x += targetX - scaledCenter.x;
+  clone.position.z += targetZ - scaledCenter.z;
+  clone.position.y += targetY - scaledBox.min.y;
+  clone.updateMatrixWorld(true);
+
+  scene.add(clone);
+  spoilerClone = clone;
+
+  return { mountPoint: new THREE.Vector3(targetX, targetY, targetZ), span: carSize.x * widthRatio };
+}
+
+function focusOnSpoiler(mount){
+  const r = Math.max(mount.span, 0.6) / 2;
+  // Car is always centered at z=0 (loadCarById guarantees this), so the
+  // mount point's own z sign tells us which way is "outward, away from
+  // the car" - approach the camera from that same side rather than
+  // assuming a fixed world direction.
+  const outwardZ = Math.sign(mount.mountPoint.z) || 1;
+  const camPos = mount.mountPoint.clone().add(new THREE.Vector3(r * 1.4, r * 1.3, outwardZ * r * 2.1));
+  const target = mount.mountPoint.clone().add(new THREE.Vector3(0, r * 0.5, 0));
+
+  document.querySelectorAll('.angle-btn').forEach(b => b.classList.remove('active'));
+  tweenStart.copy(camera.position);
+  tweenEnd.copy(camPos);
+  tweenTargetStart.copy(controls.target);
+  tweenTargetEnd.copy(target);
+  tweenT = 0;
+  tweenActive = true;
+  autoSpin = false;
+  document.getElementById('spinDot').classList.remove('on');
+  document.getElementById('spinLabel').textContent = 'Auto-rotate off';
+}
+
+window.selectSpoiler = function(id, el){
+  document.querySelectorAll('#spoilerRow .part-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  currentSpoilerId = id;
+
+  if (id === 'none'){
+    clearSpoilerClone();
+    const carBox = new THREE.Box3().setFromObject(currentModel);
+    const carSize = carBox.getSize(new THREE.Vector3());
+    const carCenter = carBox.getCenter(new THREE.Vector3());
+    const anchor = spoilerAnchor || new THREE.Vector3(carCenter.x, carBox.max.y, carBox.max.z);
+    focusOnSpoiler({
+      mountPoint: new THREE.Vector3(carCenter.x, anchor.y, anchor.z),
+      span: carSize.x * 0.42
+    });
+  } else {
+    const opt = spoilerOptions[id];
+    loadSpoilerTemplate(id, (tmpl) => {
+      const mount = applySpoiler(opt, tmpl);
+      focusOnSpoiler(mount);
+    });
+  }
+};
+
+function buildSpoilerRow(){
+  const wrap = document.getElementById('spoilerRow');
+  Object.keys(spoilerOptions).forEach((id) => {
+    const opt = spoilerOptions[id];
+    const chip = document.createElement('div');
+    chip.className = 'part-chip' + (id === 'none' ? ' active' : '');
+    chip.dataset.spoiler = id;
+    chip.innerHTML = `
+      <div class="part-chip-name">${opt.name}</div>
+      <div class="part-chip-tag">${opt.tag}</div>
+    `;
+    chip.onclick = () => window.selectSpoiler(id, chip);
+    wrap.appendChild(chip);
+  });
+}
+buildSpoilerRow();
+
+function selectCarCard(id, card){
+  document.querySelectorAll('#carCarousel .build-card').forEach(x => x.classList.remove('active'));
+  card.classList.add('active');
+}
+
+window.exitViewMode = function(){
+  document.body.classList.remove('view-mode');
+};
+
+function enterViewMode(id, card){
+  selectCarCard(id, card);
+  document.body.classList.add('view-mode');
+  if (currentCarId !== id) loadCarById(id);
+};
+
+function buildCarCarousel(){
+  const wrap = document.getElementById('carCarousel');
+  Object.keys(carConfigs).forEach((id) => {
+    const cfg = carConfigs[id];
+    const card = document.createElement('div');
+    card.className = 'build-card' + (id === 'lambo' ? ' active' : '');
+    card.innerHTML = `
+      <div class="build-swatch car-swatch" style="background:${cfg.swatchColor}">${cfg.badge}</div>
+      <div class="build-name">${cfg.name}</div>
+      <div class="build-tag">${cfg.tag}</div>
+      <button type="button" class="view-btn">View Car</button>
+    `;
+    card.querySelector('.view-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      enterViewMode(id, card);
+    });
+    card.addEventListener('click', () => {
+      const changingCar = currentCarId !== id;
+      selectCarCard(id, card);
+      exitViewMode();
+      if (changingCar) loadCarById(id);
+    });
+    wrap.appendChild(card);
+  });
+  setupCarouselSlider();
+}
+
+let carouselIndex = 0;
+function setupCarouselSlider(){
+  const prevBtn = document.getElementById('carPrev');
+  const nextBtn = document.getElementById('carNext');
+  prevBtn.addEventListener('click', () => { carouselIndex--; updateCarouselTransform(); });
+  nextBtn.addEventListener('click', () => { carouselIndex++; updateCarouselTransform(); });
+  window.addEventListener('resize', updateCarouselTransform);
+  updateCarouselTransform();
+}
+
+function updateCarouselTransform(){
+  const track = document.getElementById('carCarousel');
+  const viewport = track.parentElement;
+  const firstCard = track.children[0];
+  const prevBtn = document.getElementById('carPrev');
+  const nextBtn = document.getElementById('carNext');
+  if (!firstCard){
+    prevBtn.disabled = true; nextBtn.disabled = true;
+    return;
+  }
+  const gap = 0.8 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const cardWidth = firstCard.getBoundingClientRect().width + gap;
+  const visibleCount = Math.max(1, Math.floor((viewport.clientWidth + gap) / cardWidth));
+  const maxIndex = Math.max(0, track.children.length - visibleCount);
+  carouselIndex = Math.min(Math.max(carouselIndex, 0), maxIndex);
+  track.style.transform = `translateX(-${carouselIndex * cardWidth}px)`;
+  prevBtn.disabled = carouselIndex <= 0;
+  nextBtn.disabled = carouselIndex >= maxIndex;
+}
+buildCarCarousel();
+updatePriceDisplay();
+
+function onResize(){
+  camera.aspect = stage.clientWidth / stage.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(stage.clientWidth, stage.clientHeight);
+}
+window.addEventListener('resize', onResize);
+
+function animate(){
+  requestAnimationFrame(animate);
+
+  if (tweenActive){
+    tweenT += 0.035;
+    if (tweenT >= 1){ tweenT = 1; tweenActive = false; }
+    const eased = 1 - Math.pow(1 - tweenT, 3);
+    camera.position.lerpVectors(tweenStart, tweenEnd, eased);
+    controls.target.lerpVectors(tweenTargetStart, tweenTargetEnd, eased);
+  }
+
+  controls.autoRotate = autoSpin && !tweenActive;
+  controls.autoRotateSpeed = 1.6;
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+loadCarById('lambo');
